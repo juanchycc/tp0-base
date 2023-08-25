@@ -1,7 +1,6 @@
 import sys
-import os
 
-filename = "docker-compose-dev"
+filename = "docker-compose-dev.yaml"
 argv = sys.argv
 
 if len( argv ) < 2:
@@ -27,6 +26,8 @@ services:
       - LOGGING_LEVEL=DEBUG
     networks:
       - testing_net
+    volumes:
+      - ./server/config.ini:/config.ini
 
 """
 
@@ -39,6 +40,8 @@ clientText = """  client#:
       - CLI_LOG_LEVEL=DEBUG
     networks:
       - testing_net
+    volumes:
+      - ./client/config.yaml:/config.yaml
     depends_on:
       - server
 
@@ -55,9 +58,8 @@ finalText ="""networks:
 for i in range( 1, cantidadClientes + 1 ):
   initialText = initialText + clientText.replace( '#',str(i) )
 
-with open( filename + '.txt', 'w' ) as f:
+with open( filename, 'w' ) as f:
     f.write(initialText + finalText)
     
-os.rename(filename + '.txt', filename + ".yaml")
 
 print(f"Definición de DockerCompose finalizada con {cantidadClientes} Clientes" )
