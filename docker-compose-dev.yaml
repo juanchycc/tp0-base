@@ -55,6 +55,15 @@ services:
     depends_on:
       - server
 
+  tester:
+    container_name: tester
+    image: tester:latest
+    entrypoint: /bin/sh /test.sh
+    networks:
+      - testing_net
+    depends_on:
+      - server
+
 networks:
   testing_net:
     ipam:
