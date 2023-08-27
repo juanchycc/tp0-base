@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"net"
 	"time"
+	"os"
+	"os/signal"
+	"syscall"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -53,7 +56,11 @@ func (c *Client) StartClientLoop() {
 	// autoincremental msgID to identify every message sent
 	msgID := 1
 
+sigchnl := make(chan os.Signal, 1)
+signal.Notify(sigchnl, syscall.SIGTERM)
+
 loop:
+
 	// Send messages if the loopLapse threshold has not been surpassed
 	for timeout := time.After(c.config.LoopLapse); ; {
 		select {
@@ -61,6 +68,12 @@ loop:
 	        log.Infof("action: timeout_detected | result: success | client_id: %v",
                 c.config.ID,
             )
+			break loop
+		case sig := <-sigchnl:
+			
+			log.Infof("action: signal_detected -> %v | result: success | client_id: %v", sig, c.config.ID)
+			// Cierro socket
+			c.conn.Close()
 			break loop
 		default:
 		}
@@ -93,6 +106,7 @@ loop:
 
 		// Wait a time between sending one message and the next one
 		time.Sleep(c.config.LoopPeriod)
+		
 	}
 
 	log.Infof("action: loop_finished | result: success | client_id: %v", c.config.ID)
