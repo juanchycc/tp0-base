@@ -1,9 +1,10 @@
+from common.loteria import *
+
 import socket
 import logging
 import signal
 
-
-
+MAX_BUFFER = 1024
 
 class Server:
     def __init__(self, port, listen_backlog):
@@ -12,6 +13,7 @@ class Server:
         self._server_socket.bind(('', port))
         self._server_socket.listen(listen_backlog)
         self._terminated = False
+        self._loteria = Loteria()
         signal.signal(signal.SIGTERM, lambda s, _f: self.sigterm_handler( s ) ) 
         
     def sigterm_handler( self, signal ):
@@ -44,12 +46,23 @@ class Server:
         client socket will also be closed
         """
         try:
-            # TODO: Modify the receive to avoid short-reads
-            msg = client_sock.recv(1024).rstrip().decode('utf-8')
+            msg = client_sock.recv(MAX_BUFFER).rstrip().decode('utf-8')
+            if not msg: return
+            
+            self._loteria.add_bets( msg )
+            if not self._loteria.store_bets():
+                client_sock.close()
+                return
+
             addr = client_sock.getpeername()
-            logging.info(f'action: receive_message | result: success | ip: {addr[0]} | msg: {msg}')
-            # TODO: Modify the send to avoid short-writes
-            client_sock.send("{}\n".format(msg).encode('utf-8'))
+            
+            res = self._loteria.successMsg()
+            if( len(res) > MAX_BUFFER ):
+                logging.error("action: success_message | result: fail | error: Messagge is too long")
+                client_sock.close()
+                return
+            
+            client_sock.send(res.encode('utf-8'))
         except OSError as e:
             logging.error("action: receive_message | result: fail | error: {e}")
         finally:
