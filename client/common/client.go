@@ -105,7 +105,13 @@ loop:
 		)
 
 		// Wait a time between sending one message and the next one
-		//time.Sleep(c.config.LoopPeriod)
+		timeout := time.After(c.config.LoopPeriod)
+		select {
+		case <-timeout:
+		case sig := <-sigchnl:
+			log.Infof("action: signal_detected -> %v | result: success | client_id: %v", sig, c.config.ID)
+			return
+		}
 
 	}
 
