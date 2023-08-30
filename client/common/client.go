@@ -70,6 +70,7 @@ func (c *Client) StartClientLoop(apuesta Apuesta) {
 		Agency:  c.config.ID,
 	}
 	msgString := apuestaMsg.CreateMsgString()
+
 	// si msg vacio, no tengo nada que mandar
 	if msgString == "" || len(msgString) > MAX_BUFFER {
 		log.Errorf(
@@ -125,6 +126,7 @@ func (c *Client) StartClientLoop(apuesta Apuesta) {
 	}
 	c.finish()
 	log.Infof("action: loop_finished | result: success | client_id: %v", c.config.ID)
+	return
 }
 
 func (c *Client) finish() {

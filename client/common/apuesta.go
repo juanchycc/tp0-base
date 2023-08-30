@@ -1,5 +1,7 @@
 package common
 
+const SINGLE_BET_TYPE = "SINGLE_BET"
+
 type Apuesta struct {
 	Name     string
 	LastName string
@@ -23,5 +25,5 @@ func (a *ApuestaMsg) CreateMsgString() string {
 
 	apuesta := a.Apuesta
 
-	return a.Agency + ";" + apuesta.Name + ";" + apuesta.LastName + ";" + apuesta.Document + ";" + apuesta.Birthday + ";" + apuesta.Number + "\n"
+	return SINGLE_BET_TYPE + ";" + a.Agency + ";" + apuesta.Name + ";" + apuesta.LastName + ";" + apuesta.Document + ";" + apuesta.Birthday + ";" + apuesta.Number + "\n"
 }
