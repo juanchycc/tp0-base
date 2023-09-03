@@ -4,8 +4,6 @@ import socket
 import logging
 import signal
 
-MAX_BUFFER = 1024
-
 class Server:
     def __init__(self, port, listen_backlog):
         # Initialize server socket
@@ -46,28 +44,18 @@ class Server:
         client socket will also be closed
         """
         try:
-            msg = client_sock.recv(MAX_BUFFER).rstrip().decode('utf-8')
-            if not msg: return
-            
-            self._loteria.add_bets( msg )
-            if not self._loteria.store_bets():
-                client_sock.close()
-                return
+
+            repeat = True
+            while repeat:
+                repeat = self._loteria.add_bets( client_sock )
 
             addr = client_sock.getpeername()
-            
-            res = self._loteria.successMsg()
-            if( len(res) > MAX_BUFFER ):
-                logging.error("action: success_message | result: fail | error: Messagge is too long")
-                client_sock.close()
-                return
-            
-            client_sock.send(res.encode('utf-8'))
+ 
         except OSError as e:
             logging.error("action: receive_message | result: fail | error: {e}")
         finally:
             client_sock.close()
-
+            
     def __accept_new_connection(self):
         """
         Accept new connections
