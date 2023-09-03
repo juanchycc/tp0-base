@@ -1,9 +1,8 @@
 import logging
-import sys
 from common.utils import Bet, store_bets
 
 MAX_BUFFER = 8192
-BET_FIELDS = 7
+BET_FIELDS = 5
 FINISH_FIELDS = 3
 SINGLE_BET_TYPE = "SINGLE_BET"
 MULTIPLE_BET_TYPE = "MULTIPLE_BET"
@@ -32,7 +31,6 @@ class Loteria:
         
       type, readBytes, id  = newLines[0].split(';')
       newLines.pop(0)
-        
         
       lines.append(newLines)
       msg = msg + newMsg
@@ -85,14 +83,11 @@ def store_multiple_bet( lines, id ):
   
 def get_msg_to_bet( msg, id ):
     fields = msg.split(';')
-    #TODO:
-    '''
-        if len(fields) != BET_FIELDS : 
+
+    if len(fields) != BET_FIELDS : 
       logging.info(f'action: add_bets | result: fail | error: Number of fields incomplete')
       return None
-    '''
 
-    
     name, last_name, document, birthday, number = fields
     return Bet( id, name, last_name, document, birthday, number)
     

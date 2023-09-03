@@ -3,12 +3,13 @@ package common
 import (
 	"bufio"
 	"encoding/csv"
-	"fmt"
 	"net"
 	"os"
 	"strconv"
 	"strings"
 	"unicode/utf8"
+
+	log "github.com/sirupsen/logrus"
 )
 
 const SINGLE_BET_TYPE = "SINGLE_BET"
@@ -100,44 +101,21 @@ func leerApuestas(ID string, conn net.Conn) error {
 		}
 
 	}
-	//TODO: finish
-	_, err = fmt.Fprintf(
-		conn,
-		"%v;%v;%v\n", FINISH_BET_TYPE, 0, ID,
-	)
 
-	return err
+	return sendPacket(conn, FINISH_BET_TYPE, ID, "")
+
 }
 
 func sendBets(apuestas string, conn net.Conn, ID string) error {
 
-	totalLen := utf8.RuneCountInString(apuestas)
-	header := MULTIPLE_BET_TYPE + ";" + strconv.Itoa(totalLen) + ";" + ID + "\n"
-	headerLen := len(header)
+	if len(apuestas) > MAX_BUFFER {
+		log.Infof("action: sendBets| result: failed | client_id: %v | The number of bets exceeds 8KB", ID)
 
-	if totalLen > MAX_BUFFER {
-
-		totalWrite := 0
-		for totalWrite < totalLen {
-			end := totalWrite + MAX_BUFFER
-			packet := MULTIPLE_BET_TYPE + ";" + strconv.Itoa(totalLen) + ";" + ID + "\n" + apuestas[totalWrite:end] + "\n"
-			writeLen, err := conn.Write([]byte(packet))
-			if err != nil {
-				return err
-			}
-			totalWrite += writeLen - headerLen
-		}
 	} else {
-		packet := header + apuestas
-		_, err := fmt.Fprint(conn, packet)
+		err := sendPacket(conn, MULTIPLE_BET_TYPE, ID, apuestas)
 		if err != nil {
 			return err
 		}
-		/*TODO: No se envio todo entonces reenvio lo que falta
-		if (writeLen - headerLen) != totalLen {
-
-			return sendBets(MULTIPLE_BET_TYPE+";"+strconv.Itoa(totalLen)+";"+ID+"\n"+msg[writeLen:totalLen-1], conn, ID)
-		}*/
 	}
 
 	return waitSuccess(ID, conn)
@@ -157,5 +135,26 @@ func waitSuccess(ID string, conn net.Conn) error {
 		return waitSuccess(ID, conn)
 	}
 
+	return nil
+}
+
+func sendPacket(conn net.Conn, msgType string, ID string, msg string) error {
+	msgLen := utf8.RuneCountInString(msg)
+	header := msgType + ";" + strconv.Itoa(msgLen) + ";" + ID + "\n"
+
+	packet := []byte(header + msg)
+	packetLen := len(packet)
+
+	totalWriteLen := 0
+
+	//Si a la primera no escribe todo, manda lo que falta
+	for totalWriteLen < packetLen {
+		writeLen, err := conn.Write(packet[totalWriteLen:])
+		if err != nil {
+			return err
+		}
+		totalWriteLen += writeLen
+		packet = packet[totalWriteLen:packetLen]
+	}
 	return nil
 }
