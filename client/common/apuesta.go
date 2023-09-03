@@ -8,6 +8,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 )
 
 const SINGLE_BET_TYPE = "SINGLE_BET"
@@ -57,6 +58,7 @@ func leerApuestas(ID string, conn net.Conn) error {
 	cantFilas := 1
 
 	for {
+
 		record, err := reader.Read()
 		if err != nil {
 			if err.Error() == "EOF" {
@@ -85,7 +87,6 @@ func leerApuestas(ID string, conn net.Conn) error {
 		apuestas = apuestas + nuevaApuestaMsg.CreateMsgString()
 
 		if cantFilas == TOPE_APUESTAS {
-
 			err = sendBets(apuestas, conn, ID)
 			if err != nil {
 				return err
@@ -110,7 +111,7 @@ func leerApuestas(ID string, conn net.Conn) error {
 
 func sendBets(apuestas string, conn net.Conn, ID string) error {
 
-	totalLen := len(apuestas)
+	totalLen := utf8.RuneCountInString(apuestas)
 	header := MULTIPLE_BET_TYPE + ";" + strconv.Itoa(totalLen) + ";" + ID + "\n"
 	headerLen := len(header)
 
@@ -127,7 +128,6 @@ func sendBets(apuestas string, conn net.Conn, ID string) error {
 			totalWrite += writeLen - headerLen
 		}
 	} else {
-		//log.Infof("Envio: %v %v", header+msg, totalLen+headerLen)
 		packet := header + apuestas
 		_, err := fmt.Fprint(conn, packet)
 		if err != nil {

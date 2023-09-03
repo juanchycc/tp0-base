@@ -20,24 +20,24 @@ class Loteria:
     lines, type, id, msg = [], "", "", ""
     recBytes = 0
     
-    #while read:
-    newMsg = socket.recv(MAX_BUFFER).decode('utf-8')
-    #logging.info(f'llega: {newMsg}, {len(newMsg)}')
-    if not newMsg: return False 
-    #Obtener Header:
-    newLines = newMsg.split('\n')
-      
-    recBytes += ( len(newMsg) - len(newLines[0]) ) -1
-      
-    type, readBytes, id  = newLines[0].split(';')
-    newLines.pop(0)
-      
-      
-    lines.append(newLines)
-    msg = msg + newMsg
-    #Si no llego todo, sigo leyendo
-    #logging.info(f'read: {readBytes} len: {recBytes}')
-    read = ( readBytes != str(recBytes) )
+    while read:
+
+      newMsg = socket.recv(MAX_BUFFER).decode('utf-8')
+      if not newMsg: return False 
+      #Obtener Header:
+      newLines = newMsg.split('\n')
+        
+      headerLen = len(newLines[0]) + 1
+      recBytes += ( len(newMsg) - headerLen )
+        
+      type, readBytes, id  = newLines[0].split(';')
+      newLines.pop(0)
+        
+        
+      lines.append(newLines)
+      msg = msg + newMsg
+      #Si no llego todo, sigo leyendo
+      read = ( readBytes != str(recBytes) )
     
     if type == MULTIPLE_BET_TYPE:
       store_multiple_bet( lines, id )
