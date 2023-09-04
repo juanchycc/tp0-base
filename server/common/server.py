@@ -12,6 +12,8 @@ class Server:
         self._server_socket.listen(listen_backlog)
         self._terminated = False
         self._loteria = Loteria()
+        self._finished_agencies = 0
+        self._client_sockets = []
         signal.signal(signal.SIGTERM, lambda s, _f: self.sigterm_handler( s ) ) 
         
     def sigterm_handler( self, signal ):
@@ -35,6 +37,12 @@ class Server:
             client_sock = self.__accept_new_connection()
             if client_sock == None: break
             self.__handle_client_connection(client_sock)
+            
+            if self._finished_agencies == CANTIDAD_AGENCIAS:
+                logging.info(f'action: sorteo | result: success')
+                
+                send_winners(self._client_sockets)
+
 
     def __handle_client_connection(self, client_sock):
         """
@@ -53,8 +61,10 @@ class Server:
  
         except OSError as e:
             logging.error("action: receive_message | result: fail | error: {e}")
-        finally:
             client_sock.close()
+        finally:
+            self._finished_agencies+=1
+            self._client_sockets.append(client_sock)
             
     def __accept_new_connection(self):
         """

@@ -16,6 +16,7 @@ const SINGLE_BET_TYPE = "SINGLE_BET"
 const MULTIPLE_BET_TYPE = "MULTIPLE_BET"
 const FINISH_BET_TYPE = "FINISH_BET"
 const SUCCESS_BET_TYPE = "SUCCESS_BET"
+const WINNERS_BET_TYPE = "WINNERS_BET"
 const TOPE_APUESTAS = 100
 const MAX_BUFFER = 8192
 const TYPE_MSG_POSITION = 0
@@ -44,7 +45,7 @@ func (a *ApuestaMsg) CreateMsgString() string {
 	return apuesta.Name + ";" + apuesta.LastName + ";" + apuesta.Document + ";" + apuesta.Birthday + ";" + apuesta.Number + "\n"
 }
 
-func leerApuestas(ID string, conn net.Conn) error {
+func leerApuestas(conn net.Conn, ID string) error {
 
 	file, err := os.Open("./app/data/agency-" + ID + ".csv")
 	if err != nil {
@@ -117,25 +118,9 @@ func sendBets(apuestas string, conn net.Conn, ID string) error {
 			return err
 		}
 	}
+	_, err := getMsg(conn, SUCCESS_BET_TYPE)
+	return err
 
-	return waitSuccess(ID, conn)
-
-}
-
-func waitSuccess(ID string, conn net.Conn) error {
-
-	msg, err := bufio.NewReaderSize(conn, MAX_BUFFER).ReadString('\n')
-
-	if err != nil {
-		return err
-	}
-
-	res := strings.Split(msg, ";")
-	if res[TYPE_MSG_POSITION] != SUCCESS_BET_TYPE {
-		return waitSuccess(ID, conn)
-	}
-
-	return nil
 }
 
 func sendPacket(conn net.Conn, msgType string, ID string, msg string) error {
@@ -157,4 +142,60 @@ func sendPacket(conn net.Conn, msgType string, ID string, msg string) error {
 		packet = packet[totalWriteLen:packetLen]
 	}
 	return nil
+}
+
+func getWinners(conn net.Conn, ID string) error {
+
+	var msg []string
+	var err error
+
+	for len(msg) == 0 {
+		msg, err = getMsg(conn, WINNERS_BET_TYPE)
+		if err != nil {
+			return err
+		}
+	}
+
+	for _, m := range msg {
+		data := strings.Split(m, ";")
+		if data[0] == ID {
+			log.Infof("action: consulta_ganadores | result: success | client_id: %v | cant_ganadores: %v", ID, data[1])
+		}
+	}
+
+	return nil
+}
+
+func getMsg(conn net.Conn, msgType string) ([]string, error) {
+	leer := true
+	var msg []string
+	for leer {
+		buffer := make([]byte, MAX_BUFFER)
+		cant, err := bufio.NewReaderSize(conn, MAX_BUFFER).Read(buffer)
+		if err != nil {
+			return nil, err
+		}
+		recMsg := string(buffer[:cant])
+		lines := strings.Split(recMsg, "\n")
+
+		//Obtener Header:
+		header := strings.Split(lines[0], ";")
+
+		//Verifica el tipo de paquete
+		if header[0] != msgType {
+			return nil, nil
+		}
+
+		if header[1] == "0" {
+			leer = false
+		} else {
+			//Verifica si llego todo:
+			readLen := cant - len(lines[0]) - 1
+			if header[1] == strconv.Itoa(readLen) {
+				leer = false
+			}
+		}
+		msg = append(msg, lines[1:]...)
+	}
+	return msg, nil
 }

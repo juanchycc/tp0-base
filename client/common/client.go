@@ -58,7 +58,7 @@ func (c *Client) StartClientLoop(apuesta Apuesta) {
 
 	c.createClientSocket()
 
-	err := leerApuestas(c.config.ID, c.conn)
+	err := leerApuestas(c.conn, c.config.ID)
 	if err != nil {
 		log.Errorf(
 			"action: send_data | result: fail | client_id: %v | error: %v",
@@ -68,7 +68,7 @@ func (c *Client) StartClientLoop(apuesta Apuesta) {
 		c.finish()
 		return
 	}
-
+	getWinners(c.conn, c.config.ID)
 	c.finish()
 
 	// Wait a time between sending one message and the next one

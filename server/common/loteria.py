@@ -1,5 +1,7 @@
 import logging
-from common.utils import Bet, store_bets
+from common.utils import Bet, has_won, load_bets, store_bets
+
+CANTIDAD_AGENCIAS = 5
 
 MAX_BUFFER = 8192
 BET_FIELDS = 5
@@ -8,6 +10,7 @@ SINGLE_BET_TYPE = "SINGLE_BET"
 MULTIPLE_BET_TYPE = "MULTIPLE_BET"
 FINISH_BET_TYPE = "FINISH_BET"
 SUCCESS_BET_TYPE = "SUCCESS_BET"
+WINNERS_BET_TYPE = "WINNERS_BET"
 
 class Loteria:
   def __init__(self):
@@ -32,11 +35,14 @@ class Loteria:
       type, readBytes, id  = newLines[0].split(';')
       newLines.pop(0)
         
-      lines.append(newLines)
+      if lines == []:
+        lines = newLines
+      else:
+        lines.append(newLines)
       msg = msg + newMsg
       #Si no llego todo, sigo leyendo
       read = ( readBytes != str(recBytes) )
-    
+          
     if type == MULTIPLE_BET_TYPE:
       store_multiple_bet( lines, id )
       self.successMsg( socket, id)
@@ -53,7 +59,7 @@ class Loteria:
 
   def successMsg( self, socket, id ):
             
-    msg = SUCCESS_BET_TYPE + ";" + id + "\n"         
+    msg = SUCCESS_BET_TYPE + ";" + "0" + ";" + id + "\n"         
     socket.send(msg.encode('utf-8'))
   
   
@@ -75,7 +81,7 @@ def store_multiple_bet( lines, id ):
  
   for l in lines:
     if l == "": break
-    bet = get_msg_to_bet( l[0] ,id )
+    bet = get_msg_to_bet( l ,id )
     if bet == None: return
     bets.append( bet )
   
@@ -90,4 +96,35 @@ def get_msg_to_bet( msg, id ):
 
     name, last_name, document, birthday, number = fields
     return Bet( id, name, last_name, document, birthday, number)
+  
+def get_winners( ):
+  
+  agencias = {}
+  for i in range(1, CANTIDAD_AGENCIAS + 1):
+    agencias[i] = 0
+  
+  bets = list(load_bets())
+  
+  for b in bets:
+    if has_won(b):
+      agencias[b.agency] += 1
+  return agencias
+
+def send_winners( sockets ):
+  
+  winners = get_winners()
+  msg = ""
+
+  for agencia, cantidad in winners.items():
+      msg += f"{agencia};{cantidad}\n"
+      
+  header = WINNERS_BET_TYPE + ';' + str(len(msg)) + '\n'
+  
+  packet = header + msg
+  
+  for s in sockets:
+    s.send(packet.encode('utf-8'))
+    s.close()
+  
+  
     
