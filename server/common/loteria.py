@@ -1,49 +1,78 @@
 import logging
 from common.utils import Bet, store_bets
 
-BET_FIELDS = 7
+MAX_BUFFER = 1024
+BET_FIELDS = 5
+FINISH_FIELDS = 3
 SINGLE_BET_TYPE = "SINGLE_BET"
-SUCCESS_BET_TYPE = "SUCCESS"
+SUCCESS_BET_TYPE = "SUCCESS_BET"
 
 
 class Loteria:
     def __init__(self):
         self.bet = None
 
-    def complete(self, msg) -> bool:
-        fields = msg.split(';')
-        return len(fields) == BET_FIELDS
 
-    def add_bets(self, msg):
+    def add_bets( self, socket ):
+        
+        read = True
+        lines, type, id, msg = [], "", "", ""
+        recBytes = 0
+        
+        while read:
 
-        fields = msg.split(';')
-        if (len(fields) != BET_FIELDS):
-            logging.info(
-                f'action: add_bets | result: fail | error: Number of fields incomplete')
-            return
-        type, agency, name, last_name, document, birthday, number = fields
+            newMsg = socket.recv(MAX_BUFFER).decode('utf-8')
+            if not newMsg: return False 
+            #Obtener Header:
+            newLines = newMsg.split('\n')
+                
+            headerLen = len(newLines[0]) + 1
+            recBytes += ( len(newMsg) - headerLen )
+                
+            type, readBytes, id  = newLines[0].split(';')
+            newLines.pop(0)
+                
+            if lines == []:
+                lines = newLines
+            else:
+                lines.append(newLines)
+            msg = msg + newMsg
+            #Si no llego todo, sigo leyendo
+            read = ( readBytes != str(recBytes) )
+            
+        if type == SINGLE_BET_TYPE:
+            store_single_bet(lines, id)
+            self.successMsg( socket, id)
+        else:
+            logging.info(f'action: add_bets | result: fail | error: Wrong type of Message: {type}')
+        
+        return False
 
-        if (type != SINGLE_BET_TYPE):
-            logging.info(
-                f'action: add_bets | result: fail | error: Wrong type of Message: {type} expected {SINGLE_BET_TYPE}')
-            return
+    def successMsg( self, socket, id ):
+                
+        msg = SUCCESS_BET_TYPE + ";" + "0" + ";" + id + "\n"         
+        socket.send(msg.encode('utf-8'))
+    
+    
+def store_single_bet( msg, id ):
 
-        bet = Bet(agency, name, last_name, document, birthday, number)
+    bet = get_msg_to_bet( msg[0], id )
+    if bet == None: return
+                    
+    bets = []
+    bets.append( bet )
+    store_bets( bets )
+    logging.info(f'action: apuesta_almacenada | result: success | dni: {bet.document} | numero: {bet.number}')
 
-        self.bet = bet
+    return 
+    
+def get_msg_to_bet( msg, id ):
+    fields = msg.split(';')
 
-    def store_bets(self) -> bool:
-        if (self.bet == None):
-            logging.error(
-                "action: store_bet | result: fail | error: Invalid Bet")
-            return False
+    if len(fields) != BET_FIELDS : 
+        logging.info(f'action: add_bets | result: fail | error: Number of fields incomplete')
+        return None
 
-        bets = []
-        bets.append(self.bet)
-        store_bets(bets)
-        logging.info(
-            f'action: apuesta_almacenada | result: success | dni: {self.bet.document} | numero: {self.bet.number}')
-        return True
-
-    def successMsg(self):
-        return "SUCCESS" + ";" + self.bet.document + ";" + str(self.bet.number) + "\n"
+    name, last_name, document, birthday, number = fields
+    return Bet( id, name, last_name, document, birthday, number)
+    

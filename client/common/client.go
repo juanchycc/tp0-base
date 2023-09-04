@@ -1,23 +1,14 @@
 package common
 
 import (
-	"bufio"
-	"fmt"
 	"net"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
 	log "github.com/sirupsen/logrus"
 )
-
-const MAX_BUFFER = 1024
-const TYPE_MSG_POSITION = 0
-const DOCUMENT_POSITION = 1
-const NUMBER_POSITION = 2
-const SUCCESS_BET_TYPE = "SUCCESS"
 
 // ClientConfig Configuration used by the client
 type ClientConfig struct {
@@ -69,7 +60,6 @@ func (c *Client) StartClientLoop(apuesta Apuesta) {
 		Agency:  c.config.ID,
 	}
 	msgString := apuestaMsg.CreateMsgString()
-	totalLen := len(msgString)
 
 	// si msg vacio, no tengo nada que mandar
 	if msgString == "" {
@@ -79,60 +69,19 @@ func (c *Client) StartClientLoop(apuesta Apuesta) {
 		)
 		return
 	}
-	// por ahora len 1, una sola apuesta
-	len := 1
 
 	c.createClientSocket()
-
-	for i := 0; i < len; i++ {
-		select {
-		case sig := <-sigchnl:
-
-			log.Infof("action: signal_detected -> %v | result: success | client_id: %v", sig, c.config.ID)
-			c.finish()
-			return
-
-		default:
-
-			msgError := false
-			if totalLen > MAX_BUFFER {
-
-				totalMsg := totalLen / MAX_BUFFER
-				initialPos := 0
-
-				for i := 0; i < totalMsg; i++ {
-					s := msgString[initialPos : MAX_BUFFER+initialPos]
-					msgError = c.sengMsg(s)
-					if msgError {
-						break
-					}
-					initialPos += MAX_BUFFER
-				}
-
-			} else {
-				msgError = c.sengMsg(msgString)
-			}
-
-			if msgError {
-				c.finish()
-				return
-			}
-
-			msg, err := bufio.NewReaderSize(c.conn, MAX_BUFFER).ReadString('\n')
-
-			if err != nil {
-				log.Errorf("action: receive_message | result: fail | client_id: %v | error: %v",
-					c.config.ID,
-					err,
-				)
-				c.finish()
-				return
-			}
-
-			MsgHandler(msg)
-		}
-
+	err := enviarApuesta(c.conn, c.config.ID, msgString)
+	if err != nil {
+		log.Errorf(
+			"action: send_data | result: fail | client_id: %v | error: %v",
+			c.config.ID,
+			err,
+		)
+	} else {
+		log.Infof("action: apuesta_enviada | result: success | dni: %v | numero: %v", apuesta.Document, apuesta.Number)
 	}
+
 	c.finish()
 
 	// Wait a time between sending one message and the next one
@@ -149,46 +98,4 @@ func (c *Client) StartClientLoop(apuesta Apuesta) {
 
 func (c *Client) finish() {
 	c.conn.Close()
-}
-
-func (c *Client) sengMsg(msg string) bool {
-
-	len := len(msg)
-
-	writeBytes, err := fmt.Fprint(
-		c.conn,
-		msg,
-	)
-
-	if err != nil {
-		log.Errorf(
-			"action: send_data | result: fail | client_id: %v | error: %v",
-			c.config.ID,
-			err,
-		)
-		c.finish()
-		return true
-	}
-	// parte del msg no se envio, llamado recursvio para que mande el resto
-	if len > writeBytes {
-		return c.sengMsg(msg[writeBytes:len])
-	}
-	return false
-}
-
-func MsgHandler(msg string) {
-
-	msgLen := len(msg)
-	if msgLen == 0 {
-		return
-	}
-
-	msg = msg[0 : msgLen-1]
-	res := strings.Split(msg, ";")
-	if res[TYPE_MSG_POSITION] == SUCCESS_BET_TYPE {
-		log.Infof("action: apuesta_enviada | result: success | dni: %v | numero: %v",
-			res[DOCUMENT_POSITION],
-			res[NUMBER_POSITION],
-		)
-	}
 }
