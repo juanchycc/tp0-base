@@ -1,8 +1,10 @@
 from common.loteria import *
+import multiprocessing
 
 import socket
 import logging
 import signal
+
 
 class Server:
     def __init__(self, port, listen_backlog):
@@ -35,20 +37,34 @@ class Server:
         communication with a client. After client with communucation
         finishes, servers starts to accept new connections again
         """
-
+        process = []
+        semaphore = multiprocessing.Semaphore()
+        agencias = multiprocessing.Value('i', 0)
+        
         while not self._terminated:
             client_sock = self.__accept_new_connection()
             if client_sock == None: break
-            self.__handle_client_connection(client_sock)
+            p = multiprocessing.Process(target=self.__handle_client_connection, args=(client_sock,agencias, semaphore))
+            logging.info('MANDO PROCESO')
+            p.start()
+            process.append(p)
+            logging.info('SIGO')
             
-            if self._finished_agencies == CANTIDAD_AGENCIAS:
-                logging.info(f'action: sorteo | result: success')
+
+            '''with agencias.get_lock():
+                if agencias.value == CANTIDAD_AGENCIAS: # type: ignore
+                    logging.info('TERMINARON TODAS, ENVIO WIN')
+                    for p in process:
+                        p.join()
+                    logging.info(f'action: sorteo | result: success')
                 
-                send_winners(self._client_sockets)
-                self._client_sockets = []
+                    send_winners(self._client_sockets)
+                    self._client_sockets = []'''
+                
+            
         self.terminate()
 
-    def __handle_client_connection(self, client_sock):
+    def __handle_client_connection(self, client_sock, agencias, semaphore):
         """
         Read message from a specific client socket and closes the socket
 
@@ -67,8 +83,14 @@ class Server:
             logging.error("action: receive_message | result: fail | error: {e}")
             client_sock.close()
         finally:
-            self._finished_agencies+=1
-            self._client_sockets.append(client_sock)
+            semaphore.acquire()
+            agencias.value += 1    
+            logging.info(f'AGENCIAS: {agencias.value}')
+            semaphore.release()
+            #TODO:ver que hacer con los sockets
+            #self._client_sockets.append(client_sock)
+            esperar_agencias(agencias,semaphore, client_sock)
+        return
             
     def __accept_new_connection(self):
         """
@@ -86,3 +108,13 @@ class Server:
             return c
         except:
             return None
+
+def esperar_agencias(agencias, semaphore, client_sock):
+    termina = False
+    while not termina:
+        semaphore.acquire()
+        if agencias.value == CANTIDAD_AGENCIAS: # type: ignore
+            logging.info(f'action: sorteo | result: success') 
+            send_winners(client_sock)
+            termina = True
+        semaphore.release()
