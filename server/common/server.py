@@ -5,6 +5,11 @@ import socket
 import logging
 import signal
 
+class ServerStatus:
+    def __init__(self):
+        self.semaphore = multiprocessing.Semaphore()
+        self.rec_signal = multiprocessing.Value('i', False)
+        self.agencias_procesadas = multiprocessing.Value('i', 0)
 
 class Server:
     def __init__(self, port, listen_backlog):
@@ -14,8 +19,7 @@ class Server:
         self._server_socket.listen(listen_backlog)
         self._terminated = False
         self._loteria = Loteria()
-        self._finished_agencies = 0
-        self._client_sockets = []
+        self._status = ServerStatus()
         signal.signal(signal.SIGTERM, lambda s, _f: self.sigterm_handler( s ) ) 
         
     def sigterm_handler( self, signal ):
@@ -23,11 +27,12 @@ class Server:
         self.terminate()
 
     def terminate( self ):
+        self._status.semaphore.acquire()
+        self._status.rec_signal.value = True # type: ignore
+        self._status.semaphore.release()
         self._terminate = True
         self._server_socket.close()
-        if len(self._client_sockets) > 0:
-            for c in self._client_sockets:
-                c.close()
+
 
     def run(self):
         """
@@ -38,33 +43,19 @@ class Server:
         finishes, servers starts to accept new connections again
         """
         process = []
-        semaphore = multiprocessing.Semaphore()
-        agencias = multiprocessing.Value('i', 0)
         
         while not self._terminated:
             client_sock = self.__accept_new_connection()
             if client_sock == None: break
-            p = multiprocessing.Process(target=self.__handle_client_connection, args=(client_sock,agencias, semaphore))
-            logging.info('MANDO PROCESO')
+            p = multiprocessing.Process(target=self.__handle_client_connection, args=(client_sock,self._status))
             p.start()
-            process.append(p)
-            logging.info('SIGO')
+            process.append(p)   
             
+        for p in process:
+            p.join()
+        
 
-            '''with agencias.get_lock():
-                if agencias.value == CANTIDAD_AGENCIAS: # type: ignore
-                    logging.info('TERMINARON TODAS, ENVIO WIN')
-                    for p in process:
-                        p.join()
-                    logging.info(f'action: sorteo | result: success')
-                
-                    send_winners(self._client_sockets)
-                    self._client_sockets = []'''
-                
-            
-        self.terminate()
-
-    def __handle_client_connection(self, client_sock, agencias, semaphore):
+    def __handle_client_connection(self, client_sock, status):
         """
         Read message from a specific client socket and closes the socket
 
@@ -83,13 +74,11 @@ class Server:
             logging.error("action: receive_message | result: fail | error: {e}")
             client_sock.close()
         finally:
-            semaphore.acquire()
-            agencias.value += 1    
-            logging.info(f'AGENCIAS: {agencias.value}')
-            semaphore.release()
-            #TODO:ver que hacer con los sockets
-            #self._client_sockets.append(client_sock)
-            esperar_agencias(agencias,semaphore, client_sock)
+            status.semaphore.acquire()
+            status.agencias_procesadas.value += 1   
+            status.semaphore.release()
+
+            esperar_agencias( status, client_sock)
         return
             
     def __accept_new_connection(self):
@@ -109,12 +98,16 @@ class Server:
         except:
             return None
 
-def esperar_agencias(agencias, semaphore, client_sock):
+def esperar_agencias(status, client_sock):
     termina = False
     while not termina:
-        semaphore.acquire()
-        if agencias.value == CANTIDAD_AGENCIAS: # type: ignore
+        status.semaphore.acquire()
+        
+        if status.rec_signal.value:
+            termina = True
+        elif status.agencias_procesadas.value  == CANTIDAD_AGENCIAS: # type: ignore
             logging.info(f'action: sorteo | result: success') 
             send_winners(client_sock)
             termina = True
-        semaphore.release()
+        status.semaphore.release()
+    client_sock.close()
