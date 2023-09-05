@@ -57,8 +57,9 @@ func leerApuestas(ID string, conn net.Conn, sigchnl chan os.Signal) error {
 
 	apuestas := ""
 	cantFilas := 1
+	read := true
 
-	for {
+	for read {
 		select {
 		case sig := <-sigchnl:
 			log.Infof("action: signal_detected -> %v | result: success | client_id: %v", sig, ID)
@@ -71,7 +72,8 @@ func leerApuestas(ID string, conn net.Conn, sigchnl chan os.Signal) error {
 					if len(apuestas) != 0 {
 						sendBets(apuestas, conn, ID)
 					}
-					break
+					read = false
+					continue
 				}
 				return err
 			}
@@ -103,9 +105,9 @@ func leerApuestas(ID string, conn net.Conn, sigchnl chan os.Signal) error {
 			} else {
 				cantFilas++
 			}
-			return sendPacket(conn, FINISH_BET_TYPE, ID, "")
 		}
 	}
+	return sendPacket(conn, FINISH_BET_TYPE, ID, "")
 }
 
 func sendBets(apuestas string, conn net.Conn, ID string) error {
