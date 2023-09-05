@@ -23,6 +23,9 @@ class Server:
     def terminate( self ):
         self._terminate = True
         self._server_socket.close()
+        if len(self._client_sockets) > 0:
+            for c in self._client_sockets:
+                c.close()
 
     def run(self):
         """
@@ -42,7 +45,8 @@ class Server:
                 logging.info(f'action: sorteo | result: success')
                 
                 send_winners(self._client_sockets)
-
+                self._client_sockets = []
+        self.terminate()
 
     def __handle_client_connection(self, client_sock):
         """

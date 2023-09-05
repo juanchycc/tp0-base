@@ -58,7 +58,7 @@ func (c *Client) StartClientLoop(apuesta Apuesta) {
 
 	c.createClientSocket()
 
-	err := leerApuestas(c.conn, c.config.ID)
+	err := leerApuestas(c.conn, c.config.ID, sigchnl)
 	if err != nil {
 		log.Errorf(
 			"action: send_data | result: fail | client_id: %v | error: %v",
@@ -68,16 +68,16 @@ func (c *Client) StartClientLoop(apuesta Apuesta) {
 		c.finish()
 		return
 	}
-	getWinners(c.conn, c.config.ID)
+
 	c.finish()
 
-	// Wait a time between sending one message and the next one
+	//Wait a time between sending one message and the next one
 	timeout := time.After(c.config.LoopPeriod)
+
 	select {
 	case <-timeout:
 	case sig := <-sigchnl:
 		log.Infof("action: signal_detected -> %v | result: success | client_id: %v", sig, c.config.ID)
-		return
 	}
 	log.Infof("action: loop_finished | result: success | client_id: %v", c.config.ID)
 
