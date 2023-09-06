@@ -1,4 +1,5 @@
 import logging
+import multiprocessing
 from common.utils import Bet, has_won, load_bets, store_bets
 
 CANTIDAD_AGENCIAS = 5
@@ -70,7 +71,9 @@ def store_single_bet( msg, id ):
             
   bets = []
   bets.append( bet )
-  store_bets( bets )
+  lock = multiprocessing.Lock()
+  with lock:
+    store_bets( bets )
   logging.info(f'action: apuesta_almacenada | result: success | dni: {bet.document} | numero: {bet.number}')
 
   return 
@@ -110,7 +113,7 @@ def get_winners( ):
       agencias[b.agency] += 1
   return agencias
 
-def send_winners( sockets ):
+def send_winners( socket ):
   
   winners = get_winners()
   msg = ""
@@ -122,9 +125,9 @@ def send_winners( sockets ):
   
   packet = header + msg
   
-  for s in sockets:
-    s.send(packet.encode('utf-8'))
-    s.close()
+
+  socket.send(packet.encode('utf-8'))
+  socket.close()
   
   
     
