@@ -24,11 +24,11 @@ La estructura del Payload podría variar según su tipo, para este ejercicio se 
 
 `NOMBRE;APELLIDO;DOCUMENTO;CUMPLEAÑOS;NUMERO\n`
 
-**Mensaje SUCCESS_BET:** Mensaje enviado de Servidor a Cliente, indica que la apuesata fue procesada. No tiene Payload.
+**Mensaje SUCCESS_BET:** Mensaje enviado de Servidor a Cliente, indica que la apuesta fue procesada. No tiene Payload.
 
 **Ejemplo simple del protocolo:**
 
-[diagrama_protocolo_simple]: ./diagrama_protocolo_simple.png
+![diagrama_protocolo_simple](diagrama_protocolo_simple.png "Protocolo Simple")
 
 
 Para evitar casos de short read se cruza el largo que debería haber llegado según el header y el largo real recibido, en caso de no ser iguales, se esperara un nuevo mensaje que será concatenado con este.
