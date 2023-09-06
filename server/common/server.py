@@ -13,11 +13,12 @@ class Server:
         self._terminated = False
         self._client_socket: socket.socket
         self._loteria = Loteria()
-        signal.signal(signal.SIGTERM, lambda s, _f: self.sigterm_handler(s))
-
-    def sigterm_handler(self, signal):
-        logging.info(
-            f'action: signal_detected | result: success | signal: {signal}')
+        self._finished_agencies = 0
+        self._client_sockets = []
+        signal.signal(signal.SIGTERM, lambda s, _f: self.sigterm_handler( s ) ) 
+        
+    def sigterm_handler( self, signal ):
+        logging.info(f'action: signal_detected | result: success | signal: {signal}')
         self.terminate()
 
     def terminate(self):
@@ -27,6 +28,9 @@ class Server:
 
 
         self._server_socket.close()
+        if len(self._client_sockets) > 0:
+            for c in self._client_sockets:
+                c.close()
 
     def run(self):
         """
@@ -38,10 +42,16 @@ class Server:
         """
 
         while not self._terminated:
-            socket = self.__accept_new_connection()
-            if socket == None: break
-            self._client_socket = socket
-            self.__handle_client_connection()
+            client_sock = self.__accept_new_connection()
+            if client_sock == None: break
+            self.__handle_client_connection(client_sock)
+            
+            if self._finished_agencies == CANTIDAD_AGENCIAS:
+                logging.info(f'action: sorteo | result: success')
+                
+                send_winners(self._client_sockets)
+                self._client_sockets = []
+        self.terminate()
 
     def __handle_client_connection(self):
         """
@@ -59,10 +69,11 @@ class Server:
             addr = self._client_socket.getpeername()
  
         except OSError as e:
-            logging.error(
-                "action: receive_message | result: fail | error: {e}")
+            logging.error("action: receive_message | result: fail | error: {e}")
+            client_sock.close()
         finally:
-            self._client_socket.close()
+            self._finished_agencies+=1
+            self._client_sockets.append(client_sock)
             
     def __accept_new_connection(self):
         """
