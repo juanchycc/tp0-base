@@ -80,7 +80,7 @@ class Server:
                     status.semaphore.release()
                     repeat = self._loteria.add_bets( client_sock )
 
-            addr = self._client_socket.getpeername()
+            #addr = self._client_socket.getpeername()
  
         except OSError as e:
             logging.error("action: receive_message | result: fail | error: {e}")
