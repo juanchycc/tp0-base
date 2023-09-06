@@ -1,8 +1,6 @@
 package common
 
 import (
-	"bufio"
-	"fmt"
 	"net"
 	"os"
 	"os/signal"
@@ -52,68 +50,52 @@ func (c *Client) createClientSocket() error {
 }
 
 // StartClientLoop Send messages to the client until some time threshold is met
-func (c *Client) StartClientLoop() {
-	// autoincremental msgID to identify every message sent
-	msgID := 1
+func (c *Client) StartClientLoop(apuesta Apuesta) {
 
 	sigchnl := make(chan os.Signal, 1)
 	signal.Notify(sigchnl, syscall.SIGTERM)
 
-loop:
+	apuestaMsg := ApuestaMsg{
+		Apuesta: apuesta,
+		Agency:  c.config.ID,
+	}
+	msgString := apuestaMsg.CreateMsgString()
 
-	// Send messages if the loopLapse threshold has not been surpassed
-	for timeout := time.After(c.config.LoopLapse); ; {
-		select {
-		case sig := <-sigchnl:
-
-			log.Infof("action: signal_detected -> %v | result: success | client_id: %v", sig, c.config.ID)
-			// Cierro socket
-			c.conn.Close()
-			break loop
-		case <-timeout:
-			log.Infof("action: timeout_detected | result: success | client_id: %v",
-				c.config.ID,
-			)
-			break loop
-		default:
-		}
-
-		// Create the connection the server in every loop iteration. Send an
-		c.createClientSocket()
-
-		// TODO: Modify the send to avoid short-write
-		fmt.Fprintf(
-			c.conn,
-			"[CLIENT %v] Message N°%v\n",
+	// si msg vacio, no tengo nada que mandar
+	if msgString == "" {
+		log.Errorf(
+			"action: create_msg | result: fail | client_id: %v",
 			c.config.ID,
-			msgID,
 		)
-		msg, err := bufio.NewReader(c.conn).ReadString('\n')
-		msgID++
-		c.conn.Close()
-
-		if err != nil {
-			log.Errorf("action: receive_message | result: fail | client_id: %v | error: %v",
-				c.config.ID,
-				err,
-			)
-			return
-		}
-		log.Infof("action: receive_message | result: success | client_id: %v | msg: %v",
-			c.config.ID,
-			msg,
-		)
-
-		// Wait a time between sending one message and the next one
-		timeout := time.After(c.config.LoopPeriod)
-		select {
-		case <-timeout:
-		case sig := <-sigchnl:
-			log.Infof("action: signal_detected -> %v | result: success | client_id: %v", sig, c.config.ID)
-			return
-		}
-
+		return
 	}
 
+	c.createClientSocket()
+	err := enviarApuesta(c.conn, c.config.ID, msgString)
+	if err != nil {
+		log.Errorf(
+			"action: send_data | result: fail | client_id: %v | error: %v",
+			c.config.ID,
+			err,
+		)
+	} else {
+		log.Infof("action: apuesta_enviada | result: success | dni: %v | numero: %v", apuesta.Document, apuesta.Number)
+	}
+
+	c.finish()
+
+	// Wait a time between sending one message and the next one
+	timeout := time.After(c.config.LoopPeriod)
+	select {
+	case <-timeout:
+	case sig := <-sigchnl:
+		log.Infof("action: signal_detected -> %v | result: success | client_id: %v", sig, c.config.ID)
+		return
+	}
 	log.Infof("action: loop_finished | result: success | client_id: %v", c.config.ID)
+
+}
+
+func (c *Client) finish() {
+	c.conn.Close()
 }

@@ -1,9 +1,8 @@
+from common.loteria import *
+
 import socket
 import logging
 import signal
-
-
-
 
 class Server:
     def __init__(self, port, listen_backlog):
@@ -12,13 +11,15 @@ class Server:
         self._server_socket.bind(('', port))
         self._server_socket.listen(listen_backlog)
         self._terminated = False
-        signal.signal(signal.SIGTERM, lambda s, _f: self.sigterm_handler( s ) ) 
-        
-    def sigterm_handler( self, signal ):
-        logging.info(f'action: signal_detected | result: success | signal: {signal}')
+        self._loteria = Loteria()
+        signal.signal(signal.SIGTERM, lambda s, _f: self.sigterm_handler(s))
+
+    def sigterm_handler(self, signal):
+        logging.info(
+            f'action: signal_detected | result: success | signal: {signal}')
         self.terminate()
 
-    def terminate( self ):
+    def terminate(self):
         self._terminate = True
         self._server_socket.close()
 
@@ -44,14 +45,16 @@ class Server:
         client socket will also be closed
         """
         try:
-            # TODO: Modify the receive to avoid short-reads
-            msg = client_sock.recv(1024).rstrip().decode('utf-8')
+
+            repeat = True
+            while repeat:
+                repeat = self._loteria.add_bets( client_sock )
+
             addr = client_sock.getpeername()
-            logging.info(f'action: receive_message | result: success | ip: {addr[0]} | msg: {msg}')
-            # TODO: Modify the send to avoid short-writes
-            client_sock.send("{}\n".format(msg).encode('utf-8'))
+
         except OSError as e:
-            logging.error("action: receive_message | result: fail | error: {e}")
+            logging.error(
+                "action: receive_message | result: fail | error: {e}")
         finally:
             client_sock.close()
 
@@ -67,7 +70,8 @@ class Server:
         logging.info('action: accept_connections | result: in_progress')
         try:
             c, addr = self._server_socket.accept()
-            logging.info(f'action: accept_connections | result: success | ip: {addr[0]}')
+            logging.info(
+                f'action: accept_connections | result: success | ip: {addr[0]}')
             return c
         except:
             return None
