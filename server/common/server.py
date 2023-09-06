@@ -66,7 +66,14 @@ class Server:
 
             repeat = True
             while repeat:
-                repeat = self._loteria.add_bets( client_sock )
+                status.semaphore.acquire()
+                if status.rec_signal.value:
+                    status.semaphore.release()
+                    client_sock.close()
+                    termina = True
+                else:
+                    status.semaphore.release()
+                    repeat = self._loteria.add_bets( client_sock )
 
             addr = client_sock.getpeername()
  
