@@ -2,7 +2,9 @@ package common
 
 import (
 	"bufio"
+	"encoding/csv"
 	"net"
+	"os"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -10,12 +12,15 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-const MAX_BUFFER = 1024
+const SINGLE_BET_TYPE = "SINGLE_BET"
+const MULTIPLE_BET_TYPE = "MULTIPLE_BET"
+const FINISH_BET_TYPE = "FINISH_BET"
+const SUCCESS_BET_TYPE = "SUCCESS_BET"
+const TOPE_APUESTAS = 100
+const MAX_BUFFER = 8192
 const TYPE_MSG_POSITION = 0
 const DOCUMENT_POSITION = 1
 const NUMBER_POSITION = 2
-const SUCCESS_BET_TYPE = "SUCCESS_BET"
-const SINGLE_BET_TYPE = "SINGLE_BET"
 
 type Apuesta struct {
 	Name     string
@@ -34,38 +39,107 @@ type ApuestaMsg struct {
 // en caso de encontrar algún dato obligatorio vacio retorna un string vacio.
 func (a *ApuestaMsg) CreateMsgString() string {
 
-	if a.Agency == "" || a.Apuesta.Number == "" {
-		return ""
-	}
-
 	apuesta := a.Apuesta
 
 	return apuesta.Name + ";" + apuesta.LastName + ";" + apuesta.Document + ";" + apuesta.Birthday + ";" + apuesta.Number + "\n"
 }
 
-func enviarApuesta(conn net.Conn, ID string, apuesta string) error {
-	err := sendSingleBet(apuesta, conn, ID)
+func leerApuestas(ID string, conn net.Conn, sigchnl chan os.Signal) error {
+
+	file, err := os.Open("./app/data/agency-" + ID + ".csv")
 	if err != nil {
 		return err
 	}
-	return nil
+
+	defer file.Close()
+
+	reader := csv.NewReader(file)
+
+	apuestas := ""
+	cantFilas := 1
+	read := true
+
+	for read {
+		select {
+		case sig := <-sigchnl:
+			log.Infof("action: signal_detected -> %v | result: success | client_id: %v", sig, ID)
+			return nil
+		default:
+			record, err := reader.Read()
+			if err != nil {
+				if err.Error() == "EOF" {
+					//llega al final y hay apuestas pendientes, se mandan
+					if len(apuestas) != 0 {
+						sendBets(apuestas, conn, ID)
+					}
+					read = false
+					continue
+				}
+				return err
+			}
+
+			nuevaApuesta := Apuesta{
+				Name:     record[0],
+				LastName: record[1],
+				Document: record[2],
+				Birthday: record[3],
+				Number:   record[4],
+			}
+
+			nuevaApuestaMsg := ApuestaMsg{
+				Apuesta: nuevaApuesta,
+				Agency:  ID,
+			}
+
+			apuestas = apuestas + nuevaApuestaMsg.CreateMsgString()
+
+			if cantFilas == TOPE_APUESTAS {
+				err = sendBets(apuestas, conn, ID)
+				if err != nil {
+					return err
+				}
+
+				apuestas = ""
+				cantFilas = 1
+
+			} else {
+				cantFilas++
+			}
+		}
+	}
+	return sendPacket(conn, FINISH_BET_TYPE, ID, "")
 }
 
-func sendSingleBet(apuesta string, conn net.Conn, ID string) error {
+func sendBets(apuestas string, conn net.Conn, ID string) error {
 
-	if len(apuesta) > MAX_BUFFER {
-		log.Infof("action: sendBets| result: failed | client_id: %v | The number of bets exceeds %v", ID, MAX_BUFFER)
+	if len(apuestas) > MAX_BUFFER {
+		log.Infof("action: sendBets| result: failed | client_id: %v | The number of bets exceeds 8KB", ID)
 
 	} else {
-		err := sendPacket(conn, SINGLE_BET_TYPE, ID, apuesta)
+		err := sendPacket(conn, MULTIPLE_BET_TYPE, ID, apuestas)
 		if err != nil {
 			return err
 		}
 	}
 
-	_, err := getMsg(conn, SUCCESS_BET_TYPE)
-	return err
+	return waitSuccess(ID, conn)
 
+}
+
+func waitSuccess(ID string, conn net.Conn) error {
+
+	msg, err := bufio.NewReaderSize(conn, MAX_BUFFER).ReadString('\n')
+
+	if err != nil {
+		return err
+	}
+
+	res := strings.Split(msg, ";")
+	if res[TYPE_MSG_POSITION] != SUCCESS_BET_TYPE {
+		return waitSuccess(ID, conn)
+	}
+
+	return nil
 }
 
 func sendPacket(conn net.Conn, msgType string, ID string, msg string) error {
@@ -87,38 +161,4 @@ func sendPacket(conn net.Conn, msgType string, ID string, msg string) error {
 		packet = packet[totalWriteLen:packetLen]
 	}
 	return nil
-}
-
-func getMsg(conn net.Conn, msgType string) ([]string, error) {
-	leer := true
-	var msg []string
-	for leer {
-		buffer := make([]byte, MAX_BUFFER)
-		cant, err := bufio.NewReaderSize(conn, MAX_BUFFER).Read(buffer)
-		if err != nil {
-			return nil, err
-		}
-		recMsg := string(buffer[:cant])
-		lines := strings.Split(recMsg, "\n")
-
-		//Obtener Header:
-		header := strings.Split(lines[0], ";")
-
-		//Verifica el tipo de paquete
-		if header[0] != msgType {
-			return nil, nil
-		}
-
-		if header[1] == "0" {
-			leer = false
-		} else {
-			//Verifica si llego todo:
-			readLen := cant - len(lines[0]) - 1
-			if header[1] == strconv.Itoa(readLen) {
-				leer = false
-			}
-		}
-		msg = append(msg, lines[1:]...)
-	}
-	return msg, nil
 }

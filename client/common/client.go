@@ -51,35 +51,22 @@ func (c *Client) createClientSocket() error {
 
 // StartClientLoop Send messages to the client until some time threshold is met
 func (c *Client) StartClientLoop(apuesta Apuesta) {
+	// autoincremental msgID to identify every message sent
 
 	sigchnl := make(chan os.Signal, 1)
 	signal.Notify(sigchnl, syscall.SIGTERM)
 
-	apuestaMsg := ApuestaMsg{
-		Apuesta: apuesta,
-		Agency:  c.config.ID,
-	}
-	msgString := apuestaMsg.CreateMsgString()
-
-	// si msg vacio, no tengo nada que mandar
-	if msgString == "" {
-		log.Errorf(
-			"action: create_msg | result: fail | client_id: %v",
-			c.config.ID,
-		)
-		return
-	}
-
 	c.createClientSocket()
-	err := enviarApuesta(c.conn, c.config.ID, msgString)
+
+	err := leerApuestas(c.config.ID, c.conn, sigchnl)
 	if err != nil {
 		log.Errorf(
 			"action: send_data | result: fail | client_id: %v | error: %v",
 			c.config.ID,
 			err,
 		)
-	} else {
-		log.Infof("action: apuesta_enviada | result: success | dni: %v | numero: %v", apuesta.Document, apuesta.Number)
+		c.finish()
+		return
 	}
 
 	c.finish()
@@ -88,8 +75,8 @@ func (c *Client) StartClientLoop(apuesta Apuesta) {
 	timeout := time.After(c.config.LoopPeriod)
 	select {
 	case <-timeout:
-	case sig := <-sigchnl:
-		log.Infof("action: signal_detected -> %v | result: success | client_id: %v", sig, c.config.ID)
+	case <-sigchnl:
+		log.Infof("action: signal_detected | result: success | client_id: %v", c.config.ID)
 		return
 	}
 	log.Infof("action: loop_finished | result: success | client_id: %v", c.config.ID)

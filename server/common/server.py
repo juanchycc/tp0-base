@@ -11,6 +11,7 @@ class Server:
         self._server_socket.bind(('', port))
         self._server_socket.listen(listen_backlog)
         self._terminated = False
+        self._client_socket: socket.socket
         self._loteria = Loteria()
         signal.signal(signal.SIGTERM, lambda s, _f: self.sigterm_handler(s))
 
@@ -21,6 +22,10 @@ class Server:
 
     def terminate(self):
         self._terminate = True
+        if self._client_socket != None:
+            self._client_socket.close()
+
+
         self._server_socket.close()
 
     def run(self):
@@ -33,11 +38,12 @@ class Server:
         """
 
         while not self._terminated:
-            client_sock = self.__accept_new_connection()
-            if client_sock == None: break
-            self.__handle_client_connection(client_sock)
+            socket = self.__accept_new_connection()
+            if socket == None: break
+            self._client_socket = socket
+            self.__handle_client_connection()
 
-    def __handle_client_connection(self, client_sock):
+    def __handle_client_connection(self):
         """
         Read message from a specific client socket and closes the socket
 
@@ -48,16 +54,16 @@ class Server:
 
             repeat = True
             while repeat:
-                repeat = self._loteria.add_bets( client_sock )
+                repeat = self._loteria.add_bets( self._client_socket )
 
-            addr = client_sock.getpeername()
-
+            addr = self._client_socket.getpeername()
+ 
         except OSError as e:
             logging.error(
                 "action: receive_message | result: fail | error: {e}")
         finally:
-            client_sock.close()
-
+            self._client_socket.close()
+            
     def __accept_new_connection(self):
         """
         Accept new connections
