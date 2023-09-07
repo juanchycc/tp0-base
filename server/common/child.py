@@ -34,11 +34,14 @@ class Child:
       except OSError as e:
         logging.error("action: receive_message | result: fail | error: {e}")
         self._client_sock.close()
+        return
       finally:  
           self.esperar_agencias(barrier)
       return
 
     def esperar_agencias(self, barrier):
+      
+      #Esperar que todas las agencias finalicen con las apuestas
       barrier.wait()
       
       if self._terminate: return

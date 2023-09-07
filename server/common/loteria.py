@@ -64,7 +64,7 @@ class Loteria:
   def successMsg( self, socket, id ):
             
     msg = SUCCESS_BET_TYPE + ";" + "0" + ";" + id + "\n"         
-    socket.send(msg.encode('utf-8'))
+    send_msg( socket, msg )
   
   
 def store_single_bet( msg, id ):
@@ -131,8 +131,18 @@ def send_winners( socket ):
   packet = header + msg
   
 
-  socket.send(packet.encode('utf-8'))
+  #socket.send(packet.encode('utf-8'))
+  send_msg(socket, packet)
   socket.close()
   
+def send_msg( socket, msg ):
   
+  msg_bytes = msg.encode('utf-8') # type: ignore
+  #Enviar mientres queden bytes pendientes
+  while len(msg_bytes) > 0:
+    try:
+      sent_bytes = socket.send(msg_bytes)
+      msg_bytes = msg_bytes[sent_bytes:]  # Eliminar los bytes ya enviados
+    except Exception as e:
+        logging.info(f'Error al enviar mensaje: {str(e)}')
     

@@ -17,6 +17,7 @@ const MULTIPLE_BET_TYPE = "MULTIPLE_BET"
 const FINISH_BET_TYPE = "FINISH_BET"
 const SUCCESS_BET_TYPE = "SUCCESS_BET"
 const WINNERS_BET_TYPE = "WINNERS_BET"
+
 const TOPE_APUESTAS = 100
 const MAX_BUFFER = 8192
 const TYPE_MSG_POSITION = 0
@@ -37,7 +38,6 @@ type ApuestaMsg struct {
 }
 
 // Crea un nuevo mensaje de apuesta a partir de los campos de la estructura ApuestaMsg recibida
-// en caso de encontrar algún dato obligatorio vacio retorna un string vacio.
 func (a *ApuestaMsg) CreateMsgString() string {
 
 	apuesta := a.Apuesta
@@ -141,7 +141,7 @@ func sendPacket(conn net.Conn, msgType string, ID string, msg string) error {
 
 	totalWriteLen := 0
 
-	//Si a la primera no escribe todo, manda lo que falta
+	//Si no escribe todo, manda lo que falta
 	for totalWriteLen < packetLen {
 		writeLen, err := conn.Write(packet[totalWriteLen:])
 		if err != nil {
@@ -176,8 +176,14 @@ func getWinners(conn net.Conn, ID string) error {
 }
 
 func getMsg(conn net.Conn, msgType string) ([]string, error) {
+
 	leer := true
-	var msg []string
+	header := ""
+	totalLen := "0"
+
+	msg := ""
+
+	//Leer mientras falte
 	for leer {
 		buffer := make([]byte, MAX_BUFFER)
 		cant, err := bufio.NewReaderSize(conn, MAX_BUFFER).Read(buffer)
@@ -187,24 +193,31 @@ func getMsg(conn net.Conn, msgType string) ([]string, error) {
 		recMsg := string(buffer[:cant])
 		lines := strings.Split(recMsg, "\n")
 
-		//Obtener Header:
-		header := strings.Split(lines[0], ";")
+		if len(header) == 0 && len(lines[0]) > 0 {
 
-		//Verifica el tipo de paquete
-		if header[0] != msgType {
-			return nil, nil
+			//Obtener Header:
+			header := strings.Split(lines[0], ";")
+			//Verifica el tipo de paquete
+			if header[0] != msgType {
+				return nil, nil
+			}
+			if header[1] == "0" {
+				leer = false
+			}
+			totalLen = header[1]
 		}
 
-		if header[1] == "0" {
-			leer = false
-		} else {
+		if leer {
 			//Verifica si llego todo:
 			readLen := cant - len(lines[0]) - 1
-			if header[1] == strconv.Itoa(readLen) {
+			if totalLen == strconv.Itoa(readLen) {
 				leer = false
 			}
 		}
-		msg = append(msg, lines[1:]...)
+		msg += recMsg
 	}
-	return msg, nil
+
+	totalLines := strings.Split(msg, "\n")
+	//Devolver todo menos header:
+	return totalLines[1:], nil
 }

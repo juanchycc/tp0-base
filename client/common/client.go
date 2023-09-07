@@ -51,7 +51,6 @@ func (c *Client) createClientSocket() error {
 
 // StartClientLoop Send messages to the client until some time threshold is met
 func (c *Client) StartClientLoop(apuesta Apuesta) {
-	// autoincremental msgID to identify every message sent
 
 	sigchnl := make(chan os.Signal, 1)
 	signal.Notify(sigchnl, syscall.SIGTERM)
@@ -71,7 +70,6 @@ func (c *Client) StartClientLoop(apuesta Apuesta) {
 
 	c.finish()
 
-	//Wait a time between sending one message and the next one
 	timeout := time.After(c.config.LoopPeriod)
 
 	select {
