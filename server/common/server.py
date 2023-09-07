@@ -5,11 +5,7 @@ import socket
 import logging
 import signal
 
-class ServerStatus:
-    def __init__(self):
-        self.semaphore = multiprocessing.Semaphore()
-        self.rec_signal = multiprocessing.Value('i', False)
-        self.agencias_procesadas = multiprocessing.Value('i', 0)
+from common.child import child_proccess
 
 class Server:
     def __init__(self, port, listen_backlog):
@@ -19,8 +15,8 @@ class Server:
         self._server_socket.listen(listen_backlog)
         self._terminated = False
         self._client_socket: socket.socket
+        self._childs = []
         self._loteria = Loteria()
-        self._status = ServerStatus()
         signal.signal(signal.SIGTERM, lambda s, _f: self.sigterm_handler( s ) ) 
         
     def sigterm_handler( self, signal ):
@@ -28,13 +24,13 @@ class Server:
         self.terminate()
 
     def terminate( self ):
-        self._status.semaphore.acquire()
-        self._status.rec_signal.value = True # type: ignore
-        self._status.semaphore.release()
+
         self._terminate = True
         if self._client_socket != None:
             self._client_socket.close()
-
+        #Enviar SIGTERM a los procesos hijos:
+        for p in self._childs:
+            p.terminate() 
 
         self._server_socket.close()
 
@@ -47,51 +43,17 @@ class Server:
         communication with a client. After client with communucation
         finishes, servers starts to accept new connections again
         """
-        process = []
+        barrier = multiprocessing.Barrier(CANTIDAD_AGENCIAS)
         
         while not self._terminated:
             client_sock = self.__accept_new_connection()
             if client_sock == None: break
-            p = multiprocessing.Process(target=self.__handle_client_connection, args=(client_sock,self._status))
+            p = multiprocessing.Process(target= child_proccess, args=(self._loteria, client_sock, barrier))
             p.start()
-            process.append(p)   
+            self._childs.append(p)   
             
-        for p in process:
+        for p in self._childs:
             p.join()
-        
-
-    def __handle_client_connection(self, client_sock, status):
-        """
-        Read message from a specific client socket and closes the socket
-
-        If a problem arises in the communication with the client, the
-        client socket will also be closed
-        """
-        try:
-
-            repeat = True
-            while repeat:
-                status.semaphore.acquire()
-                if status.rec_signal.value:
-                    status.semaphore.release()
-                    client_sock.close()
-                    termina = True
-                else:
-                    status.semaphore.release()
-                    repeat = self._loteria.add_bets( client_sock )
-
-            #addr = self._client_socket.getpeername()
- 
-        except OSError as e:
-            logging.error("action: receive_message | result: fail | error: {e}")
-            client_sock.close()
-        finally:
-            status.semaphore.acquire()
-            status.agencias_procesadas.value += 1   
-            status.semaphore.release()
-
-            esperar_agencias( status, client_sock)
-        return
             
     def __accept_new_connection(self):
         """
@@ -110,17 +72,3 @@ class Server:
             return c
         except:
             return None
-
-def esperar_agencias(status, client_sock):
-    termina = False
-    while not termina:
-        status.semaphore.acquire()
-        
-        if status.rec_signal.value:
-            termina = True
-        elif status.agencias_procesadas.value  == CANTIDAD_AGENCIAS: # type: ignore
-            logging.info(f'action: sorteo | result: success') 
-            send_winners(client_sock)
-            termina = True
-        status.semaphore.release()
-    client_sock.close()

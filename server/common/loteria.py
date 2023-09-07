@@ -20,30 +20,33 @@ class Loteria:
   def add_bets( self, socket ):
     
     read = True
-    lines, type, id, msg = [], "", "", ""
-    recBytes = 0
-    
+    type, id, msg = "", "", ""
+    readBytes, recBytes = 0, 0
+    headerLen = 0
+    #Leer mientras no llegue todo lo esperado
     while read:
 
       newMsg = socket.recv(MAX_BUFFER).decode('utf-8')
       if not newMsg: return False 
-      #Obtener Header:
-      newLines = newMsg.split('\n')
+      
+      if headerLen == 0:
+        #Obtener Header:
+        newLines = newMsg.split('\n')
         
-      headerLen = len(newLines[0]) + 1
+        if len(newLines) > 0:
+          type, readBytes, id  = newLines[0].split(';')
+          headerLen = len(newLines[0]) + 1
+          
       recBytes += ( len(newMsg) - headerLen )
         
-      type, readBytes, id  = newLines[0].split(';')
-      newLines.pop(0)
-        
-      if lines == []:
-        lines = newLines
-      else:
-        lines.append(newLines)
       msg = msg + newMsg
       #Si no llego todo, sigo leyendo
       read = ( readBytes != str(recBytes) )
-          
+      
+    lines = msg.split('\n')
+    #Eliminar Header
+    lines.pop(0)
+    
     if type == MULTIPLE_BET_TYPE:
       store_multiple_bet( lines, id )
       self.successMsg( socket, id)
@@ -88,7 +91,9 @@ def store_multiple_bet( lines, id ):
     if bet == None: return
     bets.append( bet )
   
-  store_bets(bets)
+  lock = multiprocessing.Lock()
+  with lock:
+    store_bets(bets)
   
 def get_msg_to_bet( msg, id ):
     fields = msg.split(';')

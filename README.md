@@ -155,7 +155,7 @@ La estructura del Payload podría variar según su tipo, para este ejercicio se 
 
 Para evitar casos de short read se cruza el largo que debería haber llegado según el header y el largo real recibido, en caso de no ser iguales, se esperara un nuevo mensaje que será concatenado con este.
 
-En el caso de short write, para evitarlos se chequea que la cantidad enviada sea la esperada sino se envia el Header (con el largo actualizado) más lo que quedo pendiente por enviarse.
+En el caso de short write se chequea cuanto se envio y cuanto se esperaba enviar, si no son iguales se parsea lo que falto y se envia nuevamente, asi hasta lograrlo.
 
 ---
 
@@ -222,14 +222,13 @@ Se creará un proceso para atender a cada Agencia (cliente), si bien los proceso
 Como mecanismos de **sincronización** se utilizaron:
 
 * Lock a la hora de escribir el archivo bets.csv, de esta manera los procesos no se solaparan al momento de guardar los bets.
-* Semaforo para acceder al estado compartido del Servidor, el cual implica la cantidad de agencias completas y un flag que indica si se detecto un SIGTERM
+* Barrera para sincronizar en un mismo punto a todos los procesos, puntualmente se espera la finalización del procesamiento de todas las apuestas <br>
+para luego enviar los ganadores.
 
 Resumiendo el funcionamiento del programa:
 
 - Al llegar una nueva conexión se crea un proceso.
-- El proceso recibe las apuestas y responde, entre cada respuesta accede al semaforo para chequear si hubo un SIGTERM.
+- El proceso recibe las apuestas y responde, entre cada respuesta chequea si hubo un SIGTERM (la señal es burbujeada del padre a los hijos).
 - Cuando se finaliza el envio de apuestas el proceso lockea el archivo, cuando puede acceder, guarda las apuestas en el.
-- Se hace un acquire al semaforo, al acceder se aumenta el numero de agencias procesadas y libera el semaforo.
-- Entra en un loop en el cual pide acceso al semaforo y verifica si tuvo un SIGTERM:
-  - Si hubo un SIGTERM, cierra el socket con el cliente y finaliza.
-  - En caso de que no, verifica si todas las agencias finalizaron, en ese caso envia el mensaje WINNERS_BETS y finaliza, sino libera el lock y sigue loopeando.
+- Entra en el wait de la barrera para sincronizarse con el resto:
+- Finalmente se  envia el mensaje WINNERS_BETS.
