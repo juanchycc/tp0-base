@@ -18,7 +18,7 @@ const FINISH_BET_TYPE = "FINISH_BET"
 const SUCCESS_BET_TYPE = "SUCCESS_BET"
 const WINNERS_BET_TYPE = "WINNERS_BET"
 
-const TOPE_APUESTAS = 100
+const TOPE_APUESTAS = 1
 const MAX_BUFFER = 8192
 const TYPE_MSG_POSITION = 0
 const DOCUMENT_POSITION = 1
@@ -178,7 +178,7 @@ func getWinners(conn net.Conn, ID string) error {
 func getMsg(conn net.Conn, msgType string) ([]string, error) {
 
 	leer := true
-	header := ""
+	headerLen := 0
 	totalLen := "0"
 
 	msg := ""
@@ -191,25 +191,27 @@ func getMsg(conn net.Conn, msgType string) ([]string, error) {
 			return nil, err
 		}
 		recMsg := string(buffer[:cant])
-		lines := strings.Split(recMsg, "\n")
 
-		if len(header) == 0 && len(lines[0]) > 0 {
-
-			//Obtener Header:
-			header := strings.Split(lines[0], ";")
-			//Verifica el tipo de paquete
-			if header[0] != msgType {
-				return nil, nil
+		if headerLen == 0 {
+			lines := strings.Split(recMsg, "\n")
+			if len(lines) > 0 {
+				//Obtener Header:
+				header := strings.Split(lines[0], ";")
+				headerLen = len(lines[0]) + 1
+				//Verifica el tipo de paquete
+				if header[0] != msgType {
+					return nil, nil
+				}
+				if header[1] == "0" {
+					leer = false
+				}
+				totalLen = header[1]
 			}
-			if header[1] == "0" {
-				leer = false
-			}
-			totalLen = header[1]
 		}
 
 		if leer {
 			//Verifica si llego todo:
-			readLen := cant - len(lines[0]) - 1
+			readLen := len(recMsg) - headerLen
 			if totalLen == strconv.Itoa(readLen) {
 				leer = false
 			}
